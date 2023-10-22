@@ -1,0 +1,6 @@
+notes.md
+*__pycache__*
+*/notused/*
+.DS_Store
+build/
+*.egg-info/
