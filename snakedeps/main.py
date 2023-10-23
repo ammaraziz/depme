@@ -22,13 +22,16 @@ tools_lib = {
     "mafft"      : ["mafft", "--version"],
     "muscle"     : ["muscle", "--version"],
     "blast"      : ["blastn", "-version"],
+    "irma"       : ["IRMA"],
 
-    # misc
+    # trimmers
+    "cutadapt"   : ["cutadapt", "--version"],
 
     # toolkits
     "seqkit"     : ["seqkit", "version"],
     "bcftools"   : ["bcftools", "version"],
     "bedtools"   : ["bedtools", "version"],
+    "bbmap"      : ["bbversion.sh"],
 
     # nextstrain
     "nextclade" : ["nextclade", "--version"],
@@ -39,6 +42,16 @@ tools_lib = {
     "nextflow"   : ["nextflow", "-version"],
 }
 
+class colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 #################
 ### Functions ###
@@ -73,7 +86,7 @@ def run_shell_command(cmd, raise_errors=True,  print_error=False, extra_env=None
 
 
 class ShellCommandRunner:
-    def __init__(self, cmd, *, raise_errors=False, print_error=False, extra_env=None):
+    def __init__(self, cmd, *, raise_errors=True, print_error=False, extra_env=None):
         self.cmd = cmd
         self.raise_errors = raise_errors
         self.print_error = print_error
@@ -82,15 +95,13 @@ class ShellCommandRunner:
     def run(self):
         try:
             self.invoke_command()
-        except Exception as error:
-
-            if self.print_error:
-                self.print_error_message(error)
-
-            if self.raise_errors:
-                raise error
-            return False
-
+        except subprocess.CalledProcessError as error:
+            if error.returncode == 1:
+                return(True)
+            else:
+                if self.raise_errors:
+                    raise error
+                return False
         return True
 
     def invoke_command(self):
@@ -98,7 +109,7 @@ class ShellCommandRunner:
             self.shell_executable + self.shell_args,
             shell=False,
             stderr=subprocess.STDOUT,
-            env=self.modified_env,
+            env=self.modified_env, 
         )
 
     @property
@@ -121,40 +132,6 @@ class ShellCommandRunner:
             env.update(self.extra_env)
 
         return env
-
-    def print_error_message(self, error):
-        if isinstance(error, subprocess.CalledProcessError):
-            signal = self.signal_from_error(error)
-
-            if signal:
-                message = f"Shell exited from fatal signal {signal.name} when running: {self.cmd}"
-            else:
-                message = f"Shell exited {error.returncode} when running: {self.cmd}"
-
-            output = (error.output or b'').decode().strip("\n")
-
-            if output:
-                message += f"\nCommand output was:\n{indent(output, '  ')}"
-
-            # Bash exits 127 when it cannot find a given command.
-            if error.returncode == 127:
-                message += "\nAre you sure this program is installed?"
-
-            # Linux's oom-killer issues SIGKILLs to alleviate memory pressure
-            elif signal is SIGKILL:
-                message += f"\nThe OS may have terminated the command due to an out-of-memory condition."
-        elif isinstance(error, FileNotFoundError):
-            shell = " and ".join(self.shell_executable)
-
-            message = f"""
-                Unable to run shell commands using {shell}!
-                Augur requires {shell} to be installed.  Please open an issue on GitHub
-                <https://github.com/nextstrain/augur/issues/new> if you need assistance.
-                """
-        else:
-            message = str(error)
-
-        self.print_error(message)
 
     @staticmethod
     def print_error(message):
@@ -186,16 +163,9 @@ class ShellCommandRunner:
         else:
             return None
 
-class colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
+# def indentation(s, tabsize=4):
+#     sx = s.expandtabs(tabsize)
+#     return 0 if sx.isspace() else len(sx) - len(sx.lstrip())
 
 def test_executable(tool: str) -> bool:
     """
@@ -203,28 +173,28 @@ def test_executable(tool: str) -> bool:
 
     Return True if exists, else False
     """
-
-    call = tools_lib[tool]
-
+    try:
+        call = tools_lib[tool]
+    except KeyError as e:
+        return "Not tested"
     try:
         run_shell_command(" ".join(call))
         return "Installed"
     except Exception:
         return "Missing"
     
-def pretty_print(tool_status: dict) -> None:
+def pretty_print(tool_status: dict, type: str) -> None:
     """
     Pretty print to terminal the status of the tools 
     """
     
-    print(f"\n{colors.UNDERLINE}Dependencies\n{colors.ENDC}")
+    print(f"\n{colors.UNDERLINE}{type} Dependencies{colors.ENDC}")
     for tool, status in tool_status.items():
-        if status == 'Missing':
-            col = colors.WARNING
         if status == 'Installed':
             col = colors.OKBLUE
-        print(f"{col}{tool}:\t{status}{colors.ENDC}", file=sys.stdout)
-    print(file=sys.stdout)
+        else:
+            col = colors.WARNING
+        print(f"{col:10s}{tool:10s} \t{status}{colors.ENDC}", file=sys.stdout)
 
 def parse_file(filename: Path) -> list:
     """
@@ -239,35 +209,43 @@ def parse_file(filename: Path) -> list:
             std_deps.append(line)
     return(std_deps, pip_deps)
 
+def count_indentation(string):
+    spaces = len(string) - len(string.lstrip(' '))
+    return spaces
 
+# this needs to be refractored. It's a mess.
 def parse_yaml(filename: Path) -> list:
     """
     Parse yaml file, return list of dependencies
     """
     std_deps = []
     pip_deps = []
+
     with open(filename, "r") as file:
         for line in file:
             if "dependencies:" in line:
                 for line in file:
+                    indent_amount = count_indentation(line)
                     # general clean up
-                    line = line.strip().replace(" ", "")
-                    line = line.strip().replace("    ", "")
+                    line = line.strip().replace(" ", "").replace("    ", "")
                     line = line = re.sub(r"^-", "", line)
+
                     # pip_deps
-                    if "pip" in line:
+                    if "pip" in line and indent_amount == 2:
                         for line in file:
-                            line = line.strip().replace(" ", "")
-                            line = line = re.sub(r"\t", "", line)
-                            line = line = re.sub(r"^-", "", line)
-                            if "=" in line:
-                                pos = line.index("=")
-                                line = line[:pos]
-                            pip_deps = line
+                            if indent_amount == 2:
+                                line = line.strip().replace(" ", "") # whitespace
+                                line = line = re.sub(r"\t", "", line) # strip tab
+                                line = line = re.sub(r"^-", "", line) # strip starting dash
+                                if "=" in line:
+                                    pos = line.index("=") 
+                                    line = line[:pos] # skip version
+                                if "pip:" in line:
+                                    continue
+                                pip_deps.append(line)
 
                     # std_deps
-                    # strip conda syntax
-                    if "::" in line:
+                    if "::" in line: # strip conda syntax
                         pos = line.index("::")
                         line = line[pos+2:]
                     # strip version
@@ -275,15 +253,22 @@ def parse_yaml(filename: Path) -> list:
                         pos = line.index("=")
                         line = line[:pos]
                     std_deps.append(line)
+                    
+                    # detect and ignore r packages
+                    # not implemented
+                    # if "r-" in line:
+                    #     
+                    
     return(std_deps, pip_deps)
 
-def test_pip(tool):
-    import importlib
-    loader = importlib.find_loader(tool)
+def test_pip(tool: str) -> bool:
+    from importlib import util
+    loader = util.find_spec(tool)
+
     if loader:
-        return(True)
+        return("Installed")
     else:
-        return(False)
+        return("Missing")
 
 ############
 ### Main ###
@@ -300,6 +285,7 @@ def run(args):
     """
     
     tested_deps = defaultdict(dict)
+    tested_pips = defaultdict(dict)
 
     if args.input:
         for dep in args.input:
@@ -316,57 +302,80 @@ def run(args):
         for dep in std_deps:
             tested_deps[dep] = test_executable(dep)
         for dep in pip_deps:
-            tested_deps[dep] = test_pip(dep)
+            tested_pips[dep] = test_pip(dep)
 
-    pretty_print(tested_deps)
-    sys.exit(f"{colors.OKCYAN}Testing complete. {colors.ENDC}") 
+    if "Missing" in tested_deps.values():
+        missing = True
+    else:
+        missing = False
+
+    pretty_print(tested_deps, type="Conda")
+    pretty_print(tested_pips, type="Pip")
+
+    if args.error and missing:
+        print(f"\n{colors.WARNING}Testing complete - Missing dependencies detected.{colors.ENDC}")
+        sys.exit(1)
+    else:
+        print(f"\n{colors.OKCYAN}Testing complete.{colors.ENDC}")
+
+usage=f"""depme [-h] [-f FILE] [-y YAML] [-o OUTPUT] [-p] [-e] [input ...]
+
+Examples:\n
+    Terminal:\t depme snakemake nextflow mafft
+    File:\t depme -f deps.txt
+    Yaml:\t depme -y deps.yaml
+    \t Add -o depsme.tsv to save output
+    \t Add -p to print to terminal
+    \t Use -e to disable returning exit status code 1 if any tool is missing 
+"""
 
 def main():
     parser = argparse.ArgumentParser(
         description="Test workflow dependencies. Enter the name of the tool",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         prog="depme",
-        usage=f"""depme [-h] [-f FILE] [-y YAML] [-o OUTPUT] [-p] [input ...]
-examples:\n
-    Terminal:\t depme snakemake nextflow mafft
-    File:\t depme -f deps.txt
-    Yaml:\t depme -y deps.yaml
-    \t\t Add -o depsme.tsv to save output
-    \t\t Add -p to print to terminal
-""")
+        usage=usage)
 
     parser.add_argument('input', nargs='*', 
                         help="Read from std input")
-    parser.add_argument("-f", "--file",
+    parser.add_argument("-f", "--file", type=Path,
                         help="Read deps from .txt - one per line"),
-    parser.add_argument("-y", "--yaml",
+    parser.add_argument("-y", "--yaml", type=Path,
                         help="Read deps from .yaml file - eg used in conda install.")
-    parser.add_argument("-o", "--output",
+    parser.add_argument("-o", "--output", type=Path,
                         help="Write to file - output is tsv with headers")
     parser.add_argument("-p", "--pretty-print",
-                        action='store_false',
+                        action="store_false",
                         default=True,
                         help="Pretty print to stdout?")
-    args = parser.parse_args(args=None if sys.argv[1:] else ['--help'])
-
+    parser.add_argument("-e", "--error",
+                        action="store_false",
+                        default=True,
+                        help="Return error code if any dependency is missing.")
+    args = parser.parse_args(args=None if sys.argv[1:] else ["--help"])
     
-    ## check if both positional and file inputs are provided 
-    # return helpful message
-    if args.input and args.file or args.yaml:
-        print(f"{colors.WARNING}Specify deps from terminal OR from file. Can't not perform checks on both.{colors.ENDC}")
+    # check if both positional and file inputs are provided 
+    if args.input and args.yaml:
+        print(usage)
+        print(f"{colors.WARNING}Specify input from terminal OR from file. Can't not perform checks on both.{colors.ENDC}")
         sys.exit()
 
+    # check at least one input is specified
+    if not any([args.input, args.file, args.yaml]):
+        print(usage)
+        print(f"{colors.WARNING}Must specify one input type: terminal, file [-f] or yaml [-y].{colors.ENDC}")
+        sys.exit()
 
     # check if files exist
-
     if args.file:
-        pass
+        if not args.file.is_file():
+            print(f"{colors.WARNING}File not detected, check if it exists: {args.file}{colors.ENDC}")
+            sys.exit()
     if args.yaml:
-        pass
-    
+        if not args.yaml.is_file():
+            print(f"{colors.WARNING}File not detected, check if it exists: {args.file}{colors.ENDC}")
+            sys.exit()
     run(args)
-
-    
 
 if __name__ == "__main__":
     main()
