@@ -280,8 +280,6 @@ def write_results(filename: Path,
         for key, value in all_tests.items():
             outfile.write(f"{key}\t{value}\n")
 
-
-
 # def count_indentation(string):
 #     spaces = len(string) - len(string.lstrip(' '))
 #     return spaces
@@ -681,11 +679,11 @@ def main():
                         help="Write to file - output is tsv with headers")
     parser.add_argument("-p", "--pretty-print",
                         action="store_false",
-                        default=True,
+                        default=False,
                         help="Pretty print to stdout?")
     parser.add_argument("-e", "--error",
                         action="store_false",
-                        default=True,
+                        default=False,
                         help="Return error code if any dependency is missing.")
     args = parser.parse_args(args=None if sys.argv[1:] else ["--help"])
     
