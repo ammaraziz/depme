@@ -170,7 +170,7 @@ class ShellCommandRunner:
     #     else:
     #         return None
 
-def test_executable(tool: str) -> bool:
+def check_exe(tool: str) -> bool:
     """
     Test if tool exists.
 
@@ -191,7 +191,7 @@ def test_executable(tool: str) -> bool:
     except Exception:
         return "Missing"
 
-def test_pip(tool: str) -> bool:
+def check_pip(tool: str) -> bool:
     from importlib import util
 
     # skip version
@@ -206,7 +206,7 @@ def test_pip(tool: str) -> bool:
     else:
         return("Missing")
 
-def test_r(r_packages: list) -> list[bool]:
+def check_r(r_packages: list) -> list[bool]:
     '''
     Function to test R deps.
     Runs R with a function that checks if R can find the path to the package
@@ -612,28 +612,28 @@ def run(args):
 
     if args.input:
         for dep in args.input:
-            tested_deps[dep] = test_executable(dep)
+            tested_deps[dep] = check_exe(dep)
         pretty_print(tested_deps, type="Conda", pp=args.pretty_print)
 
     if args.file:
         # only std_deps are supported here
         std_deps, pip_deps = parse_file(args.file)
         for dep in std_deps:
-            tested_deps[dep] = test_executable(dep)
+            tested_deps[dep] = check_exe(dep)
         pretty_print(tested_deps, type="Conda", pp=args.pretty_print)
 
     if args.yaml:
         std_deps, pip_deps, r_deps = parse_yaml2(args.yaml)
         if std_deps:
             for dep in std_deps:
-                tested_deps[dep] = test_executable(dep)
+                tested_deps[dep] = check_exe(dep)
             pretty_print(tested_deps, type="Conda", pp=args.pretty_print)
         if pip_deps:
             for dep in pip_deps:
-                tested_pips[dep] = test_pip(dep)
+                tested_pips[dep] = check_pip(dep)
             pretty_print(tested_pips, type="Pip", pp=args.pretty_print)
         if r_deps:
-            status_of_packages = test_r(r_deps)
+            status_of_packages = check_r(r_deps)
             for status,dep in zip(status_of_packages, r_deps):
                 tested_rlang[dep] = status 
             pretty_print(tested_rlang, type="Rlang", pp=args.pretty_print)

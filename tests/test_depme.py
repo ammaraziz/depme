@@ -1,6 +1,11 @@
-import depme
+import pytest
+from depme.main import *
+
 def test_pip_success():
-  assert test_pip("collections") == "Installed"
+
+  out = check_pip("collections") 
+  assert out == "Installed"
 
 def test_pip_missing():
-  assert test_pip("biopython") == "Missing"
+  tool = "biopython"
+  assert check_pip(tool=tool) == "Missing"

@@ -7,5 +7,6 @@ setup(name='depme',
       author_email='ammar.aziz@mh.org.au',
       license='GPL3',
       python_requires='>=3.9.15',
-      entry_points={"console_scripts": ["depme = depme.main:main"]}
+      package_data={'depme': ['tests/*']},
+      entry_points={"console_scripts": ["depme = depme.main:main"]},
       )
