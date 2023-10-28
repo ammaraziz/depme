@@ -8,7 +8,6 @@ dependencies:
   - snakemake
   - cutadapt
   - python=3.9
-  - biopython=1.78
   - bbmap
   - r-base
   - r-optparse
@@ -19,8 +18,9 @@ dependencies:
   - r-gridExtra
   - r-furrr
   - ammaraziz::irma
+  - r-tidyr
   pip:
-    - test
     - icecream
     - pix
-  - r-tidyr
+    - biopython=1.78
+
