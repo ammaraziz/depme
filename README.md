@@ -34,11 +34,13 @@ depme snakemake mafft minimap2
 
 from a generic text file (one dependency per line):
 ```
+# !note! only tools are supported for this input - no python/R packages
 depme -f deps.txt
 ```
 
 from conda.yaml:
 ```
+# preferred input method
 depme -y deps.yaml
 ```
 
