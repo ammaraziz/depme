@@ -35,7 +35,7 @@ depme -y deps.yaml
 
 as a module inside python script (eg in a snakemake pipeline):
 ```
-import depme
+from depme.main import run
 from argparse import Namespace
 
 packages = ['snakemake', 'mafft', 'minimap2']
@@ -46,8 +46,10 @@ args = Namespace(
     output=None,
     pretty_print=True,
     error=True,
-    *packages
+    input=packages,
     )
+    
+run(args)
 ```
 
 pretty print the results to help end users:

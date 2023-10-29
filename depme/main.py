@@ -49,6 +49,9 @@ tools_lib = {
     # workflows
     "snakemake"  : ["snakemake", "--version"],
     "nextflow"   : ["nextflow", "-version"],
+
+    # generic
+    "which"      : ["which", "which"]
 }
 
 class colors:
@@ -139,36 +142,6 @@ class ShellCommandRunner:
             env.update(self.extra_env)
 
         return env
-
-    # @staticmethod
-    # def print_error(message):
-    #     """Prints message to STDERR formatted with textwrap.dedent"""
-    #     print("\nERROR: " + dedent(message).lstrip("\n") + "\n", file=sys.stderr)
-
-    # @staticmethod
-    # def signal_from_error(error):
-    #     """
-    #     Return the :py:class:`signal.Signals` member for the
-    #     :py:attr:`subprocess.CalledProcessError.returncode` of *error*, if any.
-    #     """
-    #     def signal(num):
-    #         try:
-    #             return Signals(num)
-    #         except ValueError:
-    #             return None
-
-    #     # A grandchild process exited from a signal, which bubbled back up
-    #     # through Bash as 128 + signal number.
-    #     if error.returncode > 128:
-    #         return signal(error.returncode - 128)
-
-    #     # CalledProcessError documents that fatal signals for the direct child
-    #     # process (bash in our case) are reported as negative exit codes.
-    #     elif error.returncode < 0:
-    #         return signal(abs(error.returncode))
-
-    #     else:
-    #         return None
 
 def check_exe(tool: str) -> bool:
     """
@@ -606,28 +579,28 @@ def run(args):
     depme.run(Namespace(ArgsGoHere))
     """
     
-    tested_deps = defaultdict(dict)
+    tested_exe = defaultdict(dict)
     tested_pips = defaultdict(dict)
     tested_rlang = defaultdict(dict)
 
     if args.input:
         for dep in args.input:
-            tested_deps[dep] = check_exe(dep)
-        pretty_print(tested_deps, type="Conda", pp=args.pretty_print)
+            tested_exe[dep] = check_exe(dep)
+        pretty_print(tested_exe, type="Conda", pp=args.pretty_print)
 
     if args.file:
         # only std_deps are supported here
         std_deps, pip_deps = parse_file(args.file)
         for dep in std_deps:
-            tested_deps[dep] = check_exe(dep)
-        pretty_print(tested_deps, type="Conda", pp=args.pretty_print)
+            tested_exe[dep] = check_exe(dep)
+        pretty_print(tested_exe, type="Conda", pp=args.pretty_print)
 
     if args.yaml:
         std_deps, pip_deps, r_deps = parse_yaml2(args.yaml)
         if std_deps:
             for dep in std_deps:
-                tested_deps[dep] = check_exe(dep)
-            pretty_print(tested_deps, type="Conda", pp=args.pretty_print)
+                tested_exe[dep] = check_exe(dep)
+            pretty_print(tested_exe, type="Conda", pp=args.pretty_print)
         if pip_deps:
             for dep in pip_deps:
                 tested_pips[dep] = check_pip(dep)
@@ -640,9 +613,9 @@ def run(args):
 
     # output deps to file
     if args.output:
-        write_results(args.output, tested_deps, tested_pips, tested_rlang)
+        write_results(args.output, tested_exe, tested_pips, tested_rlang)
 
-    if "Missing" in tested_deps.values():
+    if "Missing" in list(tested_exe.values()) + list(tested_rlang.values()) + list(tested_pips.values()):
         print(f"\n{colors.WARNING}Testing complete - Missing dependencies detected.{colors.ENDC}")
         if args.error:
             sys.exit(1)
@@ -678,11 +651,11 @@ def main():
     parser.add_argument("-o", "--output", type=Path,
                         help="Write to file - output is tsv with headers")
     parser.add_argument("-p", "--pretty-print",
-                        action="store_false",
+                        action="store_true",
                         default=False,
                         help="Pretty print to stdout?")
     parser.add_argument("-e", "--error",
-                        action="store_false",
+                        action="store_true",
                         default=False,
                         help="Return error code if any dependency is missing.")
     args = parser.parse_args(args=None if sys.argv[1:] else ["--help"])
